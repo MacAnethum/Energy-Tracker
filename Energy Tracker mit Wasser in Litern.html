@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Haus Verbrauch Tracker</title>
+    <meta name="theme-color" content="#6d4aff">
+    <style>
+        :root {
+            --primary: #6d4aff;
+            --bg: #f5f7fa;
+            --card-bg: #ffffff;
+            --text: #333333;
+            --text-light: #666666;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --border-radius: 12px;
+            --shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        * { box-sizing: border-box; touch-action: manipulation; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            line-height: 1.5;
+        }
+
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+
+        header { text-align: center; margin-bottom: 24px; }
+
+        h1 { margin: 0; font-size: 1.5rem; color: var(--primary); }
+        p.subtitle { margin: 5px 0 0; color: var(--text-light); font-size: 0.9rem; }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .card-label { font-size: 0.75rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 0.5px; }
+        .card-value { font-size: 1.4rem; font-weight: 700; margin: 8px 0; color: var(--text); }
+        .card-unit { font-size: 0.8rem; color: var(--text-light); }
+
+        .input-section, .charts-section, .settings-section {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
+            margin-bottom: 24px;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+        }
+
+        .form-group { margin-bottom: 16px; }
+        .form-group:last-child { margin-bottom: 0; }
+
+        label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 0.9rem; }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        input[type="number"], input[type="datetime-local"] {
+            width: 100%;
+            border: none;
+            background: transparent;
+            padding: 12px;
+            font-size: 1.1rem;
+            text-align: center;
+            outline: none;
+            -moz-appearance: textfield;
+        }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+        .btn-adjust {
+            background: #fff;
+            border: none;
+            border-left: 1px solid #e0e0e0;
+            width: 44px;
+            height: 100%;
+            font-size: 1.2rem;
+            cursor: pointer;
+            color: var(--primary);
+            transition: background 0.2s;
+        }
+        .btn-adjust:active { background: #eee; }
+        .btn-adjust.minus { color: var(--danger); }
+
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .btn {
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s;
+            text-align: center;
+        }
+        .btn:active { transform: scale(0.98); }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: #e0e0e0; color: var(--text); }
+        .btn-full { grid-column: span 2; }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 12px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: var(--text-light);
+            border-radius: 20px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active { background: var(--primary); color: white; }
+
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .chart-container { width: 100%; height: 100%; }
+
+        .price-input {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .price-input input {
+            width: 100px;
+            padding: 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            text-align: right;
+        }
+
+        .save-prices-btn {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 12px;
+        }
+
+        .tools-section {
+            margin-top: 24px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: 0; top: 0; opacity: 0;
+            width: 100%; height: 100%;
+            cursor: pointer;
+        }
+
+        .history-list { margin-top: 20px; max-height: 300px; overflow-y: auto; }
+
+        .history-item {
+            background: #fff;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+        .history-date { font-weight: 600; color: var(--text-light); white-space: nowrap; }
+        .history-data { flex: 1; }
+
+        .btn-delete {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            color: var(--danger);
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .btn-delete:hover { background: #fdeaea; }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .toast.show { opacity: 1; }
+
+        .info-note {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            margin-top: 8px;
+        }
+
+        @media (min-width: 600px) {
+            .dashboard { grid-template-columns: repeat(4, 1fr); }
+            .actions { grid-template-columns: 1fr 1fr 1fr; }
+            .btn-full { grid-column: span 3; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <h1>Verbrauch Tracker</h1>
+        <p class="subtitle">Energie &amp; Wasser Monitoring</p>
+    </header>
+
+    <div class="dashboard">
+        <div class="card">
+            <div class="card-label">Heute</div>
+            <div class="card-value" id="cost-today">0.00</div>
+            <div class="card-unit">€</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Diese Woche</div>
+            <div class="card-value" id="cost-week">0.00</div>
+            <div class="card-unit">€</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Dieser Monat</div>
+            <div class="card-value" id="cost-month">0.00</div>
+            <div class="card-unit">€</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Jahres-Prognose</div>
+            <div class="card-value" id="cost-year">0.00</div>
+            <div class="card-unit">€</div>
+        </div>
+    </div>
+
+    <div class="charts-section">
+        <div class="section-title">Verbrauchs-Übersicht</div>
+        <div class="tabs">
+            <button class="tab-btn active" data-chart="consumption">Verbrauch</button>
+            <button class="tab-btn" data-chart="water">Wasser</button>
+            <button class="tab-btn" data-chart="costs">Kosten</button>
+            <button class="tab-btn" data-chart="temp">Temperatur</button>
+        </div>
+        <div class="chart-wrapper">
+            <canvas id="chart-canvas" class="chart-container"></canvas>
+        </div>
+        <p class="info-note">Im Verbrauchs-Graphen wird Wasser in Litern angezeigt (1 m³ = 1.000 L).</p>
+    </div>
+
+    <div class="settings-section">
+        <div class="section-title">Preiskonfiguration</div>
+        <div class="price-input">
+            <label style="flex:1">Strom (€/kWh)</label>
+            <input type="number" id="price-electric" step="0.01" value="0.30">
+        </div>
+        <div class="price-input">
+            <label style="flex:1">Gas (€/m³)</label>
+            <input type="number" id="price-gas" step="0.01" value="0.08">
+        </div>
+        <div class="price-input">
+            <label style="flex:1">Wasser (€/m³)</label>
+            <input type="number" id="price-water" step="0.01" value="1.50">
+        </div>
+        <button class="save-prices-btn" onclick="savePrices()">Preise Speichern</button>
+    </div>
+
+    <div class="input-section">
+        <div class="section-title">Neuer Eintrag</div>
+
+        <div class="form-group">
+            <label>Datum &amp; Zeit</label>
+            <div class="input-wrapper">
+                <input type="datetime-local" id="input-date">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Raumtemperatur (°C)</label>
+            <div class="input-wrapper">
+                <button class="btn-adjust minus" onclick="adjustValue('input-temp-room', -0.5)">−</button>
+                <input type="number" id="input-temp-room" step="0.5" value="">
+                <button class="btn-adjust" onclick="adjustValue('input-temp-room', 0.5)">+</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Außentemperatur (°C)</label>
+            <div class="input-wrapper">
+                <button class="btn-adjust minus" onclick="adjustValue('input-temp-out', -1)">−</button>
+                <input type="number" id="input-temp-out" step="1" value="">
+                <button class="btn-adjust" onclick="adjustValue('input-temp-out', 1)">+</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Strom Zähler (kWh)</label>
+            <div class="input-wrapper">
+                <button class="btn-adjust minus" onclick="adjustValue('input-meter-electric', -1)">−</button>
+                <input type="number" id="input-meter-electric" step="1" value="">
+                <button class="btn-adjust" onclick="adjustValue('input-meter-electric', 1)">+</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Gas Zähler (m³)</label>
+            <div class="input-wrapper">
+                <button class="btn-adjust minus" onclick="adjustValue('input-meter-gas', -0.1)">−</button>
+                <input type="number" id="input-meter-gas" step="0.1" value="">
+                <button class="btn-adjust" onclick="adjustValue('input-meter-gas', 0.1)">+</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Wasser Zähler (m³)</label>
+            <div class="input-wrapper">
+                <button class="btn-adjust minus" onclick="adjustValue('input-meter-water', -0.1)">−</button>
+                <input type="number" id="input-meter-water" step="0.1" value="">
+                <button class="btn-adjust" onclick="adjustValue('input-meter-water', 0.1)">+</button>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-secondary" onclick="resetForm()">Leeren</button>
+            <button class="btn btn-secondary" onclick="loadLastEntry()">Letzten laden</button>
+            <button class="btn btn-primary btn-full" onclick="saveEntry()">Eintrag Speichern</button>
+        </div>
+    </div>
+
+    <div class="tools-section">
+        <div class="section-title">Datenverwaltung</div>
+        <div class="actions">
+            <button class="btn btn-secondary btn-full" onclick="exportData()">CSV Exportieren (inkl. Preise)</button>
+
+            <div class="file-input-wrapper btn-secondary btn-full" style="display:flex; align-items:center; justify-content:center; padding:14px; border-radius:8px; background:#e0e0e0; color:var(--text); font-weight:600;">
+                CSV Importieren
+                <input type="file" id="import-file" accept=".csv" onchange="importData(this)">
+            </div>
+        </div>
+        <p class="info-note">Der Export enthält deine aktuellen Preise als Kopfzeilen – beim Import werden sie automatisch übernommen.</p>
+    </div>
+
+    <div class="history-list" id="history-list"></div>
+</div>
+
+<div id="toast" class="toast">Nachricht</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<script>
+    "use strict";
+
+    // Standardpreise in EUR
+    let PRICES = {
+        electric: 0.30,
+        gas: 0.08,
+        water: 1.50
+    };
+
+    let entries = [];
+    let currentChart = null;
+    let currentChartType = 'consumption';
+
+    document.addEventListener('DOMContentLoaded', function () {
+        loadData();
+        loadPrices();
+        setDefaultDateTime();
+        loadLastEntrySilent();
+        calculateDashboard();
+        renderHistory();
+        setupTabs();
+        if (typeof Chart !== 'undefined') {
+            setTimeout(initChart, 100);
+        } else {
+            console.warn("Chart.js nicht geladen – Diagramme deaktiviert, Rest funktioniert.");
+        }
+        window.addEventListener('resize', debounce(updateChart, 250));
+    });
+
+    function setupTabs() {
+        document.querySelectorAll('.tab-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                currentChartType = btn.dataset.chart;
+                updateChart();
+            });
+        });
+    }
+
+    function setDefaultDateTime() {
+        var now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('input-date').value = now.toISOString().slice(0, 16);
+    }
+
+    function adjustValue(id, delta) {
+        var input = document.getElementById(id);
+        var val = parseFloat(input.value) || 0;
+        val += delta;
+        input.value = val.toFixed(1).replace('.0', '');
+    }
+
+    function showToast(msg) {
+        var toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(function () { toast.classList.remove('show'); }, 3000);
+    }
+
+    function debounce(func, wait) {
+        var timeout;
+        return function () {
+            var args = arguments;
+            clearTimeout(timeout);
+            timeout = setTimeout(function () { func.apply(null, args); }, wait);
+        };
+    }
+
+    function loadPrices() {
+        var stored = localStorage.getItem('homeTrackerPrices');
+        if (stored) {
+            try {
+                var loaded = JSON.parse(stored);
+                PRICES = Object.assign({}, PRICES, loaded);
+            } catch (e) {
+                console.error("Fehler beim Laden der Preise", e);
+            }
+        }
+        document.getElementById('price-electric').value = PRICES.electric;
+        document.getElementById('price-gas').value = PRICES.gas;
+        document.getElementById('price-water').value = PRICES.water;
+    }
+
+    function savePrices() {
+        PRICES.electric = parseFloat(document.getElementById('price-electric').value) || 0;
+        PRICES.gas = parseFloat(document.getElementById('price-gas').value) || 0;
+        PRICES.water = parseFloat(document.getElementById('price-water').value) || 0;
+        localStorage.setItem('homeTrackerPrices', JSON.stringify(PRICES));
+        calculateDashboard();
+        updateChart();
+        showToast("Preise gespeichert!");
+    }
+
+    function saveEntry() {
+        var dateVal = document.getElementById('input-date').value;
+        if (!dateVal) { showToast("Bitte Datum wählen"); return; }
+
+        var entry = {
+            date: dateVal,
+            tempRoom: parseFloat(document.getElementById('input-temp-room').value) || 0,
+            tempOut: parseFloat(document.getElementById('input-temp-out').value) || 0,
+            meterElectric: parseFloat(document.getElementById('input-meter-electric').value) || 0,
+            meterGas: parseFloat(document.getElementById('input-meter-gas').value) || 0,
+            meterWater: parseFloat(document.getElementById('input-meter-water').value) || 0
+        };
+
+        var lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+        if (lastEntry && entry.meterElectric < lastEntry.meterElectric) {
+            if (!confirm("Der Stromzählerstand ist niedriger als der letzte Wert. Fortsetzen?")) return;
+        }
+
+        entries.push(entry);
+        entries.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+
+        saveToStorage();
+        calculateDashboard();
+        renderHistory();
+        updateChart();
+        showToast("Eintrag gespeichert!");
+        resetForm(true);
+    }
+
+    function loadLastEntrySilent() {
+        if (entries.length === 0) return;
+        var last = entries[entries.length - 1];
+        document.getElementById('input-temp-room').value = last.tempRoom;
+        document.getElementById('input-temp-out').value = last.tempOut;
+        document.getElementById('input-meter-electric').value = last.meterElectric;
+        document.getElementById('input-meter-gas').value = last.meterGas;
+        document.getElementById('input-meter-water').value = last.meterWater;
+    }
+
+    function loadLastEntry() {
+        if (entries.length === 0) { showToast("Noch keine Einträge vorhanden"); return; }
+        var last = entries[entries.length - 1];
+        document.getElementById('input-date').value = last.date;
+        loadLastEntrySilent();
+        showToast("Letzter Eintrag geladen");
+    }
+
+    function resetForm(keepDate) {
+        if (!keepDate) document.getElementById('input-date').value = '';
+        document.getElementById('input-temp-room').value = '';
+        document.getElementById('input-temp-out').value = '';
+        document.getElementById('input-meter-electric').value = '';
+        document.getElementById('input-meter-gas').value = '';
+        document.getElementById('input-meter-water').value = '';
+        if (keepDate === true) setDefaultDateTime();
+    }
+
+    function calculateDashboard() {
+        var now = new Date();
+        var startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        var startOfWeek = new Date(startOfDay);
+        startOfWeek.setDate(startOfDay.getDate() - startOfWeek.getDay());
+        var startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        var costToday = 0, costWeek = 0, costMonth = 0;
+        var totalElec = 0, totalGas = 0, totalWater = 0;
+        var lastEntry = null;
+
+        for (var i = 1; i < entries.length; i++) {
+            var curr = entries[i];
+            var prev = entries[i - 1];
+            var currDate = new Date(curr.date);
+
+            var diffElec = Math.max(0, curr.meterElectric - prev.meterElectric);
+            var diffGas = Math.max(0, curr.meterGas - prev.meterGas);
+            var diffWater = Math.max(0, curr.meterWater - prev.meterWater);
+            var cost = (diffElec * PRICES.electric) + (diffGas * PRICES.gas) + (diffWater * PRICES.water);
+
+            if (currDate >= startOfDay) costToday += cost;
+            if (currDate >= startOfWeek) costWeek += cost;
+            if (currDate >= startOfMonth) costMonth += cost;
+
+            if (currDate.getFullYear() === now.getFullYear()) {
+                totalElec += diffElec;
+                totalGas += diffGas;
+                totalWater += diffWater;
+                lastEntry = curr;
+            }
+        }
+
+        var projectedCost = 0;
+        if (entries.length > 1 && lastEntry) {
+            var firstEntry = entries[0];
+            var daysElapsed = (new Date(lastEntry.date) - new Date(firstEntry.date)) / (1000 * 60 * 60 * 24);
+            if (daysElapsed > 0) {
+                var yearCost = (totalElec * PRICES.electric) + (totalGas * PRICES.gas) + (totalWater * PRICES.water);
+                projectedCost = (yearCost / daysElapsed) * 365;
+            }
+        }
+
+        document.getElementById('cost-today').textContent = costToday.toFixed(2);
+        document.getElementById('cost-week').textContent = costWeek.toFixed(2);
+        document.getElementById('cost-month').textContent = costMonth.toFixed(2);
+        document.getElementById('cost-year').textContent = projectedCost.toFixed(2);
+    }
+
+    function renderHistory() {
+        var list = document.getElementById('history-list');
+        list.innerHTML = '';
+        var recent = entries.slice().reverse().slice(0, 10);
+
+        recent.forEach(function (e) {
+            var div = document.createElement('div');
+            div.className = 'history-item';
+            var dateFmt = new Date(e.date).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+            div.innerHTML = '<span class="history-date">' + dateFmt + '</span>' +
+                '<span class="history-data">Strom: ' + e.meterElectric + ' kWh | Gas: ' + e.meterGas + ' m³ | Wasser: ' + e.meterWater + ' m³</span>' +
+                '<button class="btn-delete" title="Diesen Eintrag löschen">🗑️</button>';
+
+            // Löschen-Button verbinden (per Index im sortierten Original-Array)
+            div.querySelector('.btn-delete').addEventListener('click', function () {
+                deleteEntry(e.date);
+            });
+
+            list.appendChild(div);
+        });
+    }
+
+    // ============ LÖSCHEN ============
+    function deleteEntry(dateStr) {
+        var idx = entries.findIndex(function (e) { return e.date === dateStr; });
+        if (idx === -1) return;
+
+        var dateFmt = new Date(dateStr).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        if (!confirm('Eintrag vom ' + dateFmt + ' wirklich löschen?\nDiese Aktion kann nicht rückgängig gemacht werden.')) return;
+
+        entries.splice(idx, 1);
+        saveToStorage();
+        calculateDashboard();
+        renderHistory();
+        updateChart();
+        showToast("Eintrag gelöscht");
+    }
+
+    function saveToStorage() {
+        localStorage.setItem('homeTrackerEntries', JSON.stringify(entries));
+    }
+
+    function loadData() {
+        var stored = localStorage.getItem('homeTrackerEntries');
+        if (stored) {
+            try {
+                entries = JSON.parse(stored);
+                entries.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+            } catch (e) {
+                console.error("Fehler beim Laden der Daten", e);
+                entries = [];
+            }
+        }
+    }
+
+    // ============ EXPORT (inkl. Preise) ============
+    function exportData() {
+        if (entries.length === 0) { showToast("Keine Daten zum Exportieren"); return; }
+
+        var lines = [];
+        // Metadaten als Kommentarzeilen (beginnen mit #)
+        lines.push("# ENERGY_TRACKER_EXPORT_V2");
+        lines.push("# EXPORT_DATE=" + new Date().toISOString());
+        lines.push("# PRICE_ELECTRIC=" + PRICES.electric);
+        lines.push("# PRICE_GAS=" + PRICES.gas);
+        lines.push("# PRICE_WATER=" + PRICES.water);
+        // Datentabelle
+        lines.push(["Datum", "RaumTemp", "AussenTemp", "Strom_kWh", "Gas_m3", "Wasser_m3"].join(";"));
+        entries.forEach(function (e) {
+            lines.push([
+                e.date.replace('T', ' '),
+                e.tempRoom,
+                e.tempOut,
+                e.meterElectric,
+                e.meterGas,
+                e.meterWater
+            ].join(";"));
+        });
+
+        var csvContent = "\uFEFF" + lines.join("\n"); // BOM für Excel-Kompatibilität
+
+        var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        var url = URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "verbrauch_export_" + new Date().toISOString().split('T')[0] + ".csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        showToast("CSV mit Preisen exportiert!");
+    }
+
+    // ============ IMPORT (erkennt Preise) ============
+    function importData(input) {
+        var file = input.files[0];
+        if (!file) return;
+
+        var reader = new FileReader();
+        reader.onload = function (e) {
+            var text = e.target.result.replace(/^\uFEFF/, '');
+            var lines = text.split(/\r?\n/);
+
+            var importedPrices = null;
+            var dataLines = [];
+
+            lines.forEach(function (line) {
+                var trimmed = line.trim();
+                if (!trimmed) return;
+
+                if (trimmed.charAt(0) === '#') {
+                    // Metadaten-Zeile: Preis extrahieren
+                    var idx, val;
+                    idx = trimmed.indexOf('PRICE_ELECTRIC=');
+                    if (idx !== -1) {
+                        val = parseFloat(trimmed.substring(idx + 'PRICE_ELECTRIC='.length));
+                        if (!isNaN(val)) { importedPrices = importedPrices || {}; importedPrices.electric = val; }
+                    }
+                    idx = trimmed.indexOf('PRICE_GAS=');
+                    if (idx !== -1) {
+                        val = parseFloat(trimmed.substring(idx + 'PRICE_GAS='.length));
+                        if (!isNaN(val)) { importedPrices = importedPrices || {}; importedPrices.gas = val; }
+                    }
+                    idx = trimmed.indexOf('PRICE_WATER=');
+                    if (idx !== -1) {
+                        val = parseFloat(trimmed.substring(idx + 'PRICE_WATER='.length));
+                        if (!isNaN(val)) { importedPrices = importedPrices || {}; importedPrices.water = val; }
+                    }
+                    // Energie-Header-Zeilen ignorieren wir sonst
+                } else if (/^[A-Za-z]/.test(trimmed) && trimmed.indexOf('Datum') === 0) {
+                    // Header-Zeile überspringen
+                } else {
+                    dataLines.push(trimmed);
+                }
+            });
+
+            var newEntries = [];
+            dataLines.forEach(function (line) {
+                var cols = line.split(';');
+                if (cols.length >= 6) {
+                    var parsedDate = cols[0].trim().replace(' ', 'T');
+                    var d = new Date(parsedDate);
+                    if (!isNaN(d.getTime())) {
+                        newEntries.push({
+                            date: parsedDate,
+                            tempRoom: parseFloat(cols[1]) || 0,
+                            tempOut: parseFloat(cols[2]) || 0,
+                            meterElectric: parseFloat(cols[3]) || 0,
+                            meterGas: parseFloat(cols[4]) || 0,
+                            meterWater: parseFloat(cols[5]) || 0
+                        });
+                    }
+                }
+            });
+
+            // Duplikate vermeiden: Einträge mit identischem Datum nur einmal
+            var existingDates = {};
+            entries.forEach(function (e) { existingDates[e.date] = true; });
+            var reallyNew = newEntries.filter(function (e) { return !existingDates[e.date]; });
+
+            if (reallyNew.length > 0) {
+                entries = entries.concat(reallyNew);
+                entries.sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+                saveToStorage();
+            }
+
+            if (importedPrices) {
+                PRICES = Object.assign({}, PRICES, importedPrices);
+                document.getElementById('price-electric').value = PRICES.electric;
+                document.getElementById('price-gas').value = PRICES.gas;
+                document.getElementById('price-water').value = PRICES.water;
+                localStorage.setItem('homeTrackerPrices', JSON.stringify(PRICES));
+            }
+
+            calculateDashboard();
+            renderHistory();
+            updateChart();
+
+            if (reallyNew.length === 0 && !importedPrices) {
+                showToast("Keine neuen Daten gefunden");
+            } else {
+                var msgParts = [];
+                if (reallyNew.length > 0) msgParts.push(reallyNew.length + " neue Einträge");
+                if (newEntries.length > reallyNew.length) msgParts.push((newEntries.length - reallyNew.length) + " Duplikate übersprungen");
+                if (importedPrices) msgParts.push("Preise übernommen");
+                showToast(msgParts.join(", "));
+            }
+            input.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    // ============ CHART ============
+    function initChart() {
+        var canvas = document.getElementById('chart-canvas');
+        if (!canvas) return;
+
+        if (currentChart) {
+            currentChart.destroy();
+            currentChart = null;
+        }
+
+        currentChart = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: { labels: [], datasets: [] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 300 },
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: { ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true }, grid: { display: false } },
+                    y: {
+                        beginAtZero: false, ticks: { font: { size: 10 } }, grid: { color: '#f0f0f0' }
+                    },
+                    y1: {
+                        position: 'right',
+                        display: 'auto',
+                        beginAtZero: true,
+                        ticks: { font: { size: 10 } },
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Liter', font: { size: 10 } }
+                    }
+                }
+            }
+        });
+
+        updateChart();
+    }
+
+    function updateChart() {
+        if (!currentChart) return;
+
+        try {
+            var sortedEntries = entries.slice().sort(function (a, b) { return new Date(a.date) - new Date(b.date); });
+
+            var sixtyDaysAgo = new Date();
+            sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+            var filteredEntries = sortedEntries.filter(function (e) { return new Date(e.date) >= sixtyDaysAgo; });
+
+            if (filteredEntries.length > 20) {
+                var step = Math.ceil(filteredEntries.length / 20);
+                var reduced = [];
+                for (var idx = 0; idx < filteredEntries.length; idx += step) {
+                    reduced.push(filteredEntries[idx]);
+                }
+                filteredEntries = reduced;
+            }
+
+            var labels = filteredEntries.map(function (e) {
+                var d = new Date(e.date);
+                return ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
+            });
+
+            currentChart.data.labels = labels;
+            currentChart.data.datasets = [];
+
+            if (currentChartType === 'consumption') {
+                var elecDiff = [0], gasDiff = [0], waterDiff = [0];
+                for (var i = 1; i < filteredEntries.length; i++) {
+                    elecDiff.push(Math.max(0, filteredEntries[i].meterElectric - filteredEntries[i - 1].meterElectric));
+                    gasDiff.push(Math.max(0, filteredEntries[i].meterGas - filteredEntries[i - 1].meterGas));
+                    // Wasser: m³-Differenz in Liter umrechnen (1 m³ = 1.000 L)
+                    waterDiff.push(Math.max(0, filteredEntries[i].meterWater - filteredEntries[i - 1].meterWater) * 1000);
+                }
+                currentChart.data.datasets = [
+                    { label: 'Strom (kWh)', data: elecDiff, borderColor: '#6d4aff', backgroundColor: 'rgba(109, 74, 255, 0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'y' },
+                    { label: 'Gas (m³)', data: gasDiff, borderColor: '#ff8c00', backgroundColor: 'rgba(255, 140, 0, 0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'y' },
+                    { label: 'Wasser (Liter)', data: waterDiff, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.1)', fill: false, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'y1' }
+                ];
+            } else if (currentChartType === 'water') {
+                // Eigener Tab: Nur Wasser, in Litern
+                var waterLiters = filteredEntries.map(function (e) { return e.meterWater * 1000; });
+                var waterConsumption = [0];
+                for (var w = 1; w < filteredEntries.length; w++) {
+                    waterConsumption.push(Math.max(0, filteredEntries[w].meterWater - filteredEntries[w - 1].meterWater) * 1000);
+                }
+                currentChart.data.datasets = [
+                    { label: 'Wasserverbrauch (Liter)', data: waterConsumption, borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'y' }
+                ];
+            } else if (currentChartType === 'costs') {
+                var costs = [0];
+                for (var j = 1; j < filteredEntries.length; j++) {
+                    var dE = Math.max(0, filteredEntries[j].meterElectric - filteredEntries[j - 1].meterElectric);
+                    var dG = Math.max(0, filteredEntries[j].meterGas - filteredEntries[j - 1].meterGas);
+                    var dW = Math.max(0, filteredEntries[j].meterWater - filteredEntries[j - 1].meterWater);
+                    costs.push((dE * PRICES.electric) + (dG * PRICES.gas) + (dW * PRICES.water));
+                }
+                currentChart.data.datasets = [
+                    { label: 'Kosten (€)', data: costs, borderColor: '#2ecc71', backgroundColor: 'rgba(46, 204, 113, 0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'y' }
+                ];
+            } else if (currentChartType === 'temp') {
+                var tempRoom = filteredEntries.map(function (e) { return e.tempRoom; });
+                var tempOut = filteredEntries.map(function (e) { return e.tempOut; });
+                currentChart.data.datasets = [
+                    { label: 'Raumtemperatur (°C)', data: tempRoom, borderColor: '#6d4aff', backgroundColor: 'rgba(109, 74, 255, 0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'y' },
+                    { label: 'Aussentemperatur (°C)', data: tempOut, borderColor: '#e74c3c', backgroundColor: 'rgba(231, 76, 60, 0.1)', fill: true, tension: 0.3, borderWidth: 2, pointRadius: 2, yAxisID: 'y' }
+                ];
+            }
+
+            currentChart.update('none');
+        } catch (err) {
+            console.error('Chart Update Error:', err);
+        }
+    }
+</script>
+</body>
+</html>
