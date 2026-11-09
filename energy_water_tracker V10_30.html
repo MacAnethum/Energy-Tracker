@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hausenergie & Wasser Tracker</title>
+    
+    <!-- PWA Web App Meta -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    
+    <!-- Inline Web App Manifest fuer PWA Erkennung -->
+    <link rel="manifest" href='data:application/manifest+json,{"name":"HomeTracker","short_name":"HomeTracker","start_url":".","display":"standalone","background_color":"#0f172a","theme_color":"#0f172a","icons":[{"src":"https://cdn-icons-png.flaticon.com/512/3105/3105804.png","sizes":"512x512","type":"image/png"}]}'>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation;
+        }
+        /* Hide spin buttons for Chrome, Safari, Edge, Opera */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        /* Hide spin buttons for Firefox */
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+        .tab-active {
+            border-bottom: 3px solid #38bdf8;
+            color: #38bdf8;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-sky-500 selection:text-white">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-sky-500/20 text-sky-400 rounded-xl">
+                    <i class="fa-solid fa-house-bolt text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-none">HomeTracker</h1>
+                    <span class="text-xs text-slate-400">Energie & Wasser Control</span>
+                </div>
+            </div>
+            <!-- Sync Status Indicator -->
+            <div class="flex items-center space-x-2 bg-slate-900/60 px-3 py-1.5 rounded-full border border-slate-700 text-xs">
+                <span id="sync-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+                <span id="sync-text" class="text-slate-300">Initialisiere Speicher...</span>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex justify-around border-t border-slate-700/60 bg-slate-800/50 text-slate-400 text-sm font-medium">
+            <button onclick="switchTab('entry')" id="tab-entry" class="py-2.5 px-4 flex items-center space-x-2 tab-active transition-all">
+                <i class="fa-solid fa-pen-to-square"></i>
+                <span>Eingabe</span>
+            </button>
+            <button onclick="switchTab('dashboard')" id="tab-dashboard" class="py-2.5 px-4 flex items-center space-x-2 transition-all">
+                <i class="fa-solid fa-chart-line"></i>
+                <span>Auswertung</span>
+            </button>
+            <button onclick="switchTab('history')" id="tab-history" class="py-2.5 px-4 flex items-center space-x-2 transition-all">
+                <i class="fa-solid fa-list-ol"></i>
+                <span>Verlauf</span>
+            </button>
+            <button onclick="switchTab('settings')" id="tab-settings" class="py-2.5 px-4 flex items-center space-x-2 transition-all">
+                <i class="fa-solid fa-sliders"></i>
+                <span>Tarife & Cloud</span>
+            </button>
+        </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 space-y-6">
+
+        <!-- TAB 1: EINGABEMASKE -->
+        <section id="section-entry" class="space-y-6">
+            <!-- Alert Banner for Previous Value info -->
+            <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 flex justify-between items-center text-xs text-slate-300">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-circle-info text-sky-400 text-base"></i>
+                    <span>Letzte Messung: <strong id="last-entry-date" class="text-white">Keine Daten</strong></span>
+                </div>
+                <button onclick="prefillWithLastValues()" class="text-xs bg-slate-700 hover:bg-slate-600 text-sky-300 px-2.5 py-1 rounded-lg border border-slate-600 transition">
+                    Werte übernehmen
+                </button>
+            </div>
+
+            <form id="entry-form" onsubmit="saveEntry(event)" class="space-y-5">
+                
+                <!-- Date, Time & Weather Row -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-800 p-4 rounded-2xl border border-slate-700/80 shadow-lg">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Datum</label>
+                        <input type="date" id="input-date" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-sky-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Uhrzeit</label>
+                        <input type="time" id="input-time" required class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-sky-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">Wetterlage</label>
+                        <select id="input-weather" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-medium focus:ring-2 focus:ring-sky-500 outline-none">
+                            <option value="☀️ Sonnig">☀️ Sonnig</option>
+                            <option value="✨ Klar">✨ Klar</option>
+                            <option value="☁️ Bewölkt">☁️ Bewölkt</option>
+                            <option value="⛅ Bedeckt">⛅ Bedeckt</option>
+                            <option value="🌫️ Nebelig">🌫️ Nebelig</option>
+                            <option value="🌧️ Regnerisch">🌧️ Regnerisch</option>
+                            <option value="❄️ Schneefall">❄️ Schneefall</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Temperatures Row -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Raumtemperatur -->
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700/80 shadow-lg space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                                <i class="fa-solid fa-temperature-arrow-up text-amber-400"></i> Raumtemperatur (°C)
+                            </label>
+                            <span class="text-xs text-slate-400">Vorher: <span id="prev-temp-room" class="text-slate-200">--</span> °C</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button type="button" onclick="adjustValue('input-temp-room', -0.5, 1)" class="w-12 h-12 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xl font-bold rounded-xl flex items-center justify-center border border-slate-600 transition">-</button>
+                            <input type="number" step="0.1" id="input-temp-room" placeholder="21.5" required class="flex-1 bg-slate-900 border border-slate-700 rounded-xl py-3 px-3 text-center text-xl font-bold text-white focus:ring-2 focus:ring-sky-500 outline-none">
+                            <button type="button" onclick="adjustValue('input-temp-room', 0.5, 1)" class="w-12 h-12 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xl font-bold rounded-xl flex items-center justify-center border border-slate-600 transition">+</button>
+                        </div>
+                    </div>
+
+                    <!-- Außentemperatur -->
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700/80 shadow-lg space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                                <i class="fa-solid fa-temperature-sun text-cyan-400"></i> Außentemperatur (°C)
+                            </label>
+                            <span class="text-xs text-slate-400">Vorher: <span id="prev-temp-out" class="text-slate-200">--</span> °C</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button type="button" onclick="adjustValue('input-temp-out', -0.5, 1)" class="w-12 h-12 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xl font-bold rounded-xl flex items-center justify-center border border-slate-600 transition">-</button>
+                            <input type="number" step="0.1" id="input-temp-out" placeholder="12.0" required class="flex-1 bg-slate-900 border border-slate-700 rounded-xl py-3 px-3 text-center text-xl font-bold text-white focus:ring-2 focus:ring-sky-500 outline-none">
+                            <button type="button" onclick="adjustValue('input-temp-out', 0.5, 1)" class="w-12 h-12 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xl font-bold rounded-xl flex items-center justify-center border border-slate-600 transition">+</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Meters Row (Strom, Gas, Wasser) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    
+                    <!-- Strom Zählerstand -->
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-amber-500/30 shadow-lg space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="text-xs font-semibold text-amber-400 flex items-center gap-2">
+                                <i class="fa-solid fa-bolt"></i> Zählerstand Strom (kWh)
+                            </label>
+                            <span class="text-xs text-slate-400">Vorher: <span id="prev-meter-elec" class="text-slate-200">--</span></span>
+                        </div>
+                        <div class="flex items-center space-x-1.5">
+                            <button type="button" onclick="adjustValue('input-meter-elec', -1, 0)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-lg font-bold rounded-xl border border-slate-600 transition">-1</button>
+                            <input type="number" step="0.1" id="input-meter-elec" placeholder="12500" required class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-2 text-center text-lg font-bold text-white focus:ring-2 focus:ring-amber-500 outline-none">
+                            <button type="button" onclick="adjustValue('input-meter-elec', 1, 0)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-lg font-bold rounded-xl border border-slate-600 transition">+1</button>
+                            <button type="button" onclick="adjustValue('input-meter-elec', 5, 0)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xs font-bold rounded-xl border border-slate-600 transition">+5</button>
+                        </div>
+                    </div>
+
+                    <!-- Gas Zählerstand -->
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-rose-500/30 shadow-lg space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="text-xs font-semibold text-rose-400 flex items-center gap-2">
+                                <i class="fa-solid fa-fire"></i> Zählerstand Gas (m³)
+                            </label>
+                            <span class="text-xs text-slate-400">Vorher: <span id="prev-meter-gas" class="text-slate-200">--</span></span>
+                        </div>
+                        <div class="flex items-center space-x-1.5">
+                            <button type="button" onclick="adjustValue('input-meter-gas', -1, 1)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-lg font-bold rounded-xl border border-slate-600 transition">-1</button>
+                            <input type="number" step="0.01" id="input-meter-gas" placeholder="3400.5" required class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-2 text-center text-lg font-bold text-white focus:ring-2 focus:ring-rose-500 outline-none">
+                            <button type="button" onclick="adjustValue('input-meter-gas', 1, 1)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-lg font-bold rounded-xl border border-slate-600 transition">+1</button>
+                            <button type="button" onclick="adjustValue('input-meter-gas', 5, 1)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xs font-bold rounded-xl border border-slate-600 transition">+5</button>
+                        </div>
+                    </div>
+
+                    <!-- Wasser Zählerstand -->
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-sky-500/30 shadow-lg space-y-2">
+                        <div class="flex justify-between items-center">
+                            <label class="text-xs font-semibold text-sky-400 flex items-center gap-2">
+                                <i class="fa-solid fa-droplet"></i> Zählerstand Wasser (m³)
+                            </label>
+                            <span class="text-xs text-slate-400">Vorher: <span id="prev-meter-water" class="text-slate-200">--</span></span>
+                        </div>
+                        <div class="flex items-center space-x-1.5">
+                            <button type="button" onclick="adjustValue('input-meter-water', -0.1, 2)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xs font-bold rounded-xl border border-slate-600 transition">-0.1</button>
+                            <input type="number" step="0.001" id="input-meter-water" placeholder="450.12" required class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl py-2.5 px-2 text-center text-lg font-bold text-white focus:ring-2 focus:ring-sky-500 outline-none">
+                            <button type="button" onclick="adjustValue('input-meter-water', 0.1, 2)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xs font-bold rounded-xl border border-slate-600 transition">+0.1</button>
+                            <button type="button" onclick="adjustValue('input-meter-water', 0.5, 2)" class="w-10 h-11 bg-slate-700 hover:bg-slate-600 active:scale-95 text-xs font-bold rounded-xl border border-slate-600 transition">+0.5</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Notes Input -->
+                <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700/80 shadow-lg">
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">Notizen / Besonderheiten</label>
+                    <textarea id="input-notes" rows="2" placeholder="z. B. Waschtag, Heizung gewartet, Pool gefüllt..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:ring-2 focus:ring-sky-500 outline-none"></textarea>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" class="w-full py-4 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold text-lg rounded-2xl shadow-lg shadow-sky-500/25 active:scale-[0.99] transition flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    <span>Messung speichern & berechnen</span>
+                </button>
+            </form>
+        </section>
+
+
+        <!-- TAB 2: DASHBOARD & AUSWERTUNG -->
+        <section id="section-dashboard" class="space-y-6 hidden">
+            
+            <!-- Summary Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Tag -->
+                <div class="bg-slate-800 border border-slate-700 p-4 rounded-2xl shadow-lg">
+                    <div class="text-xs font-semibold text-slate-400">Ø Kosten pro Tag</div>
+                    <div class="text-2xl font-bold text-sky-400 mt-1" id="cost-per-day">0,00 €</div>
+                    <div class="text-xs text-slate-400 mt-2 flex justify-between">
+                        <span>⚡ <span id="day-elec">0</span> kWh</span>
+                        <span>🔥 <span id="day-gas">0</span> m³</span>
+                        <span>💧 <span id="day-water">0</span> m³</span>
+                    </div>
+                </div>
+                <!-- Woche -->
+                <div class="bg-slate-800 border border-slate-700 p-4 rounded-2xl shadow-lg">
+                    <div class="text-xs font-semibold text-slate-400">Kosten diese Woche</div>
+                    <div class="text-2xl font-bold text-amber-400 mt-1" id="cost-per-week">0,00 €</div>
+                    <div class="text-xs text-slate-400 mt-2 flex justify-between">
+                        <span>⚡ <span id="week-elec">0</span> kWh</span>
+                        <span>🔥 <span id="week-gas">0</span> m³</span>
+                        <span>💧 <span id="week-water">0</span> m³</span>
+                    </div>
+                </div>
+                <!-- Monat -->
+                <div class="bg-slate-800 border border-slate-700 p-4 rounded-2xl shadow-lg">
+                    <div class="text-xs font-semibold text-slate-400">Kosten diesen Monat</div>
+                    <div class="text-2xl font-bold text-emerald-400 mt-1" id="cost-per-month">0,00 €</div>
+                    <div class="text-xs text-slate-400 mt-2 flex justify-between">
+                        <span>⚡ <span id="month-elec">0</span> kWh</span>
+                        <span>🔥 <span id="month-gas">0</span> m³</span>
+                        <span>💧 <span id="month-water">0</span> m³</span>
+                    </div>
+                </div>
+                <!-- Jahres-Prognose -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-900 border border-sky-500/30 p-4 rounded-2xl shadow-lg relative overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 text-sky-500/10 text-7xl font-bold">€</div>
+                    <div class="text-xs font-semibold text-sky-300">Hochrechnung Jahr (Prognose)</div>
+                    <div class="text-2xl font-black text-white mt-1" id="cost-per-year">0,00 €</div>
+                    <div class="text-xs text-slate-400 mt-2">Inkl. monatlicher Grundpreise</div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg space-y-4">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    <h2 class="font-bold text-base text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-sky-400"></i> Verbrauchsverlauf
+                    </h2>
+                    <div class="flex space-x-2">
+                        <button onclick="updateChartDataset('all')" id="btn-chart-all" class="px-3 py-1 bg-sky-600 text-white rounded-lg text-xs font-medium">Alle</button>
+                        <button onclick="updateChartDataset('elec')" id="btn-chart-elec" class="px-3 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">Strom</button>
+                        <button onclick="updateChartDataset('gas')" id="btn-chart-gas" class="px-3 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">Gas</button>
+                        <button onclick="updateChartDataset('water')" id="btn-chart-water" class="px-3 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-medium">Wasser</button>
+                    </div>
+                </div>
+                <div class="w-full h-72">
+                    <canvas id="consumptionChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Temperature vs Energy Chart -->
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg space-y-4">
+                <h2 class="font-bold text-base text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-temperature-half text-amber-400"></i> Außentemperatur & Verbrauch
+                </h2>
+                <div class="w-full h-64">
+                    <canvas id="tempChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+
+        <!-- TAB 3: VERLAUF / HISTORIE -->
+        <section id="section-history" class="space-y-4 hidden">
+            <div class="flex justify-between items-center">
+                <h2 class="font-bold text-lg text-slate-200">Messungshistorie</h2>
+                <span class="text-xs text-slate-400"><span id="history-count">0</span> Einträge</span>
+            </div>
+
+            <div class="bg-slate-800 border border-slate-700 rounded-2xl shadow-lg overflow-x-auto">
+                <table class="w-full text-left text-xs text-slate-300 min-w-[700px]">
+                    <thead class="bg-slate-900/80 text-slate-400 uppercase tracking-wider border-b border-slate-700">
+                        <tr>
+                            <th class="py-3 px-4">Datum & Zeit</th>
+                            <th class="py-3 px-4">Wetter / Temp</th>
+                            <th class="py-3 px-4">Strom (kWh)</th>
+                            <th class="py-3 px-4">Gas (m³)</th>
+                            <th class="py-3 px-4">Wasser (m³)</th>
+                            <th class="py-3 px-4">Geschätzte Kosten</th>
+                            <th class="py-3 px-4 text-right">Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body" class="divide-y divide-slate-700/50">
+                        <!-- Dynamic Rows -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+
+        <!-- TAB 4: EINSTELLUNGEN & TARIFE & IMPORT/EXPORT -->
+        <section id="section-settings" class="space-y-6 hidden">
+            
+            <!-- How to open / Install PWA Banner -->
+            <div class="bg-gradient-to-r from-sky-900/60 to-slate-800 border border-sky-500/30 p-5 rounded-2xl shadow-lg space-y-4">
+                <h2 class="font-bold text-lg text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-mobile-screen-button text-sky-400"></i> App öffnen & auf Smartphone / PC installieren
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-300">
+                    <div class="bg-slate-900/70 p-3.5 rounded-xl border border-slate-700/80 space-y-1.5">
+                        <div class="font-semibold text-sky-300 flex items-center gap-1.5">
+                            <i class="fa-brands fa-android text-emerald-400 text-sm"></i> Android Smartphone
+                        </div>
+                        <p>1. In Chrome öffnen</p>
+                        <p>2. Menü <strong class="text-white">⋮</strong> oben rechts tippen</p>
+                        <p>3. <strong class="text-sky-300">„Zum Startbildschirm hinzufügen“</strong> wählen</p>
+                    </div>
+
+                    <div class="bg-slate-900/70 p-3.5 rounded-xl border border-slate-700/80 space-y-1.5">
+                        <div class="font-semibold text-sky-300 flex items-center gap-1.5">
+                            <i class="fa-solid fa-desktop text-blue-400 text-sm"></i> PC / Mac Computer
+                        </div>
+                        <p>1. In Chrome / Edge öffnen</p>
+                        <p>2. Klicke unten auf <strong class="text-white">„Als PWA installieren“</strong></p>
+                        <button onclick="triggerPWAInstall()" id="btn-pwa-install" class="w-full py-1.5 mt-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition text-xs flex items-center justify-center gap-1.5">
+                            <i class="fa-solid fa-download"></i>
+                            <span>App jetzt installieren</span>
+                        </button>
+                    </div>
+
+                    <div class="bg-slate-900/70 p-3.5 rounded-xl border border-slate-700/80 space-y-1.5 flex flex-col justify-between">
+                        <div>
+                            <div class="font-semibold text-sky-300 flex items-center gap-1.5">
+                                <i class="fa-solid fa-qrcode text-amber-400 text-sm"></i> Auf Handy öffnen
+                            </div>
+                            <p class="mt-1">Kopiere den App-Link oder erstelle einen QR-Code zum Scannen.</p>
+                        </div>
+                        <button onclick="copyCurrentUrl()" class="w-full py-1.5 mt-2 bg-sky-600 hover:bg-sky-500 text-white font-semibold rounded-lg transition">
+                            Link kopieren
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tarifkonfiguration -->
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg space-y-4">
+                <h2 class="font-bold text-lg text-slate-200 flex items-center gap-2">
+                    <i class="fa-solid fa-calculator text-emerald-400"></i> Energie- & Wassertarife
+                </h2>
+                <p class="text-xs text-slate-400">
+                    Gib deine aktuellen Preise ein, um die Verbrauchs-Kosten exakt zu berechnen. Werden in der Cloud synchronisiert.
+                </p>
+
+                <form id="tariff-form" onsubmit="saveTariffs(event)" class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                    <!-- Strom Tarif -->
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-amber-500/20 space-y-3">
+                        <h3 class="font-bold text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-bolt"></i> Stromtarif
+                        </h3>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Arbeitspreis (Cent / kWh)</label>
+                            <input type="number" step="0.01" id="tariff-elec-kwh" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Grundpreis (€ / Monat)</label>
+                            <input type="number" step="0.01" id="tariff-elec-base" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                    </div>
+
+                    <!-- Gas Tarif -->
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-rose-500/20 space-y-3">
+                        <h3 class="font-bold text-xs text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-fire"></i> Gastarif
+                        </h3>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Arbeitspreis (€ / m³)</label>
+                            <input type="number" step="0.01" id="tariff-gas-m3" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold outline-none focus:ring-2 focus:ring-rose-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Grundpreis (€ / Monat)</label>
+                            <input type="number" step="0.01" id="tariff-gas-base" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold outline-none focus:ring-2 focus:ring-rose-500">
+                        </div>
+                    </div>
+
+                    <!-- Wasser Tarif -->
+                    <div class="bg-slate-900/60 p-4 rounded-xl border border-sky-500/20 space-y-3">
+                        <h3 class="font-bold text-xs text-sky-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i class="fa-solid fa-droplet"></i> Wassertarif
+                        </h3>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Arbeitspreis (€ / m³)</label>
+                            <input type="number" step="0.01" id="tariff-water-m3" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] text-slate-400 mb-1">Grundpreis (€ / Monat)</label>
+                            <input type="number" step="0.01" id="tariff-water-base" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold outline-none focus:ring-2 focus:ring-sky-500">
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-3 flex justify-end pt-2">
+                        <button type="submit" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-600/20 flex items-center gap-2">
+                            <i class="fa-solid fa-floppy-disk"></i>
+                            <span>Tarife speichern</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Sync & Cloud Setup Section -->
+            <div class="bg-slate-800 border border-slate-700 p-5 rounded-2xl shadow-lg space-y-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="font-bold text-lg text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-cloud text-sky-400"></i> Cloud-Synchronisation aktivieren
+                    </h2>
+                    <span id="cloud-status-badge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/20 text-sky-400 border border-sky-500/30">
+                        Lokaler Speicher
+                    </span>
+                </div>
+
+                <p class="text-xs text-slate-300 leading-relaxed">
+                    Um Daten zwischen deinem Android Smartphone und deinem PC in Echtzeit zu synchronisieren, trage deine Firebase-Zugangsdaten ein.
+                </p>
+
+                <!-- Form for User Custom Firebase Config (Always Visible & Editable) -->
+                <form id="firebase-config-form" onsubmit="saveCustomFirebaseConfig(event)" class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1">API Key (apiKey)</label>
+                        <input type="text" id="fb-apiKey" placeholder="AIzaSy..." required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1">Project ID (projectId)</label>
+                        <input type="text" id="fb-projectId" placeholder="energy-tracker-123" required class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1">Auth Domain (authDomain)</label>
+                        <input type="text" id="fb-authDomain" placeholder="energy-tracker-123.firebaseapp.com" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-semibold text-slate-400 mb-1">App ID (appId)</label>
+                        <input type="text" id="fb-appId" placeholder="1:123456789:web:abcde..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-2 focus:ring-sky-500">
+                    </div>
+
+                    <div class="md:col-span-2 flex justify-between items-center pt-2">
+                        <button type="button" onclick="clearFirebaseConfig()" class="text-xs text-rose-400 hover:underline">
+                            Zugangsdaten zurücksetzen
+                        </button>
+                        <button type="submit" class="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-semibold rounded-xl text-xs transition shadow flex items-center gap-1.5">
+                            <i class="fa-solid fa-plug"></i>
+                            <span>Verbindung herstellen & Speichern</span>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="pt-3 border-t border-slate-700/60 flex items-center space-x-2">
+                    <span class="text-xs text-slate-400">Aktuelle User Sync ID:</span>
+                    <input type="text" id="user-sync-id" readonly class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-mono text-slate-300">
+                    <button onclick="copySyncId()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-xs text-white rounded-xl transition">
+                        Kopieren
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Global Custom Modal Banner for Messages (No alert/confirm) -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 border border-sky-500 text-white px-5 py-3 rounded-2xl shadow-2xl transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center space-x-3 pointer-events-none">
+        <i id="toast-icon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toast-message" class="text-sm font-medium">Aktion erfolgreich</span>
+    </div>
+
+    <!-- Firebase System Integration -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            doc, 
+            setDoc, 
+            addDoc, 
+            onSnapshot, 
+            deleteDoc
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global State
+        window.appState = {
+            entries: [],
+            tariffs: {
+                elecKwh: 35.0,    // Cent per kWh
+                elecBase: 12.00,  // Euro / Month
+                gasM3: 1.10,      // Euro per m3
+                gasBase: 15.00,   // Euro / Month
+                waterM3: 4.50,    // Euro per m3
+                waterBase: 8.00   // Euro / Month
+            },
+            db: null,
+            auth: null,
+            user: null,
+            appId: typeof __app_id !== 'undefined' ? __app_id : 'hometracker-app-default',
+            chartInstance: null,
+            tempChartInstance: null,
+            activeChartType: 'all',
+            isCloudActive: false
+        };
+
+        // Helper to sync state to LocalStorage as automatic fallback
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem('hometracker_entries', JSON.stringify(window.appState.entries));
+                localStorage.setItem('hometracker_tariffs', JSON.stringify(window.appState.tariffs));
+            } catch (e) {
+                console.warn("LocalStorage save error:", e);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                const localEntries = localStorage.getItem('hometracker_entries');
+                const localTariffs = localStorage.getItem('hometracker_tariffs');
+                if (localEntries) {
+                    window.appState.entries = JSON.parse(localEntries);
+                }
+                if (localTariffs) {
+                    window.appState.tariffs = JSON.parse(localTariffs);
+                }
+            } catch (e) {
+                console.warn("LocalStorage load error:", e);
+            }
+        }
+
+        // Determine Config: Saved in LocalStorage or system injected
+        let customFbConfig = null;
+        try {
+            const savedFb = localStorage.getItem('hometracker_user_fb_config');
+            if (savedFb) customFbConfig = JSON.parse(savedFb);
+        } catch(e) {}
+
+        // Populate fields immediately so they never vanish
+        document.addEventListener('DOMContentLoaded', () => {
+            if (customFbConfig) {
+                if (document.getElementById('fb-apiKey')) document.getElementById('fb-apiKey').value = customFbConfig.apiKey || '';
+                if (document.getElementById('fb-projectId')) document.getElementById('fb-projectId').value = customFbConfig.projectId || '';
+                if (document.getElementById('fb-authDomain')) document.getElementById('fb-authDomain').value = customFbConfig.authDomain || '';
+                if (document.getElementById('fb-appId')) document.getElementById('fb-appId').value = customFbConfig.appId || '';
+            }
+        });
+
+        const firebaseConfig = customFbConfig || (typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : null);
+
+        // Auto Fallback Safety Timeout: Ensure UI renders even if Firebase hangs
+        let cloudInitialized = false;
+        const initTimeout = setTimeout(() => {
+            if (!cloudInitialized) {
+                console.warn("Cloud connection timeout - defaulting to Local Storage");
+                enableOfflineFallback("Verbindungs-Timeout zur Cloud");
+            }
+        }, 2500);
+
+        if (firebaseConfig && firebaseConfig.apiKey && firebaseConfig.apiKey !== "demo" && firebaseConfig.apiKey !== "") {
+            try {
+                const app = initializeApp(firebaseConfig);
+                const db = getFirestore(app);
+                const auth = getAuth(app);
+
+                window.appState.db = db;
+                window.appState.auth = auth;
+
+                async function initAuth() {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.warn("Auth failed, using offline storage:", err);
+                        clearTimeout(initTimeout);
+                        enableOfflineFallback("Auth-Fehler: " + err.message);
+                    }
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    clearTimeout(initTimeout);
+                    cloudInitialized = true;
+                    if (user) {
+                        window.appState.user = user;
+                        window.appState.isCloudActive = true;
+                        document.getElementById('sync-dot').className = "w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse";
+                        document.getElementById('sync-text').innerText = "Cloud Aktiv";
+                        document.getElementById('cloud-status-badge').className = "px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                        document.getElementById('cloud-status-badge').innerText = "🟢 Cloud Live Verbunden";
+                        document.getElementById('user-sync-id').value = user.uid;
+                        
+                        subscribeToCloudData();
+                    } else {
+                        enableOfflineFallback("Auth-Status: Kein Benutzer angemeldet");
+                    }
+                });
+
+                initAuth();
+            } catch (e) {
+                console.warn("Firebase Init Error, falling back to LocalStorage:", e);
+                clearTimeout(initTimeout);
+                enableOfflineFallback("Firebase Fehler: " + e.message);
+            }
+        } else {
+            clearTimeout(initTimeout);
+            enableOfflineFallback("Keine gültigen Firebase-Zugangsdaten");
+        }
+
+        function enableOfflineFallback(reason = "") {
+            cloudInitialized = true;
+            window.appState.isCloudActive = false;
+            document.getElementById('sync-dot').className = "w-2.5 h-2.5 rounded-full bg-sky-400";
+            document.getElementById('sync-text').innerText = "Lokaler Speicher";
+            document.getElementById('cloud-status-badge').className = "px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/20 text-sky-400 border border-sky-500/30";
+            document.getElementById('cloud-status-badge').innerText = "🔵 Offline (Lokaler Speicher)";
+            document.getElementById('user-sync-id').value = "lokaler-modus-offline";
+            
+            if (reason) {
+                console.info("Offline Fallback Grund:", reason);
+            }
+
+            loadFromLocalStorage();
+            updateFormLastValues();
+            renderHistoryTable();
+            calculateDashboardStats();
+            loadTariffsToUI();
+        }
+
+        // Save Firebase Config Form Action
+        window.saveCustomFirebaseConfig = function(e) {
+            e.preventDefault();
+            const apiKey = document.getElementById('fb-apiKey').value.trim();
+            const projectId = document.getElementById('fb-projectId').value.trim();
+            const authDomain = document.getElementById('fb-authDomain').value.trim() || `${projectId}.firebaseapp.com`;
+            const appId = document.getElementById('fb-appId').value.trim();
+
+            if (!apiKey || !projectId) {
+                showToast("Bitte mindestens API Key und Project ID ausfüllen!", "fa-circle-exclamation text-amber-400");
+                return;
+            }
+
+            const config = { apiKey, projectId, authDomain, appId };
+            localStorage.setItem('hometracker_user_fb_config', JSON.stringify(config));
+            showToast("Zugangsdaten gespeichert! Verbinde mit Cloud...", "fa-circle-check text-emerald-400");
+            setTimeout(() => location.reload(), 800);
+        };
+
+        window.clearFirebaseConfig = function() {
+            localStorage.removeItem('hometracker_user_fb_config');
+            document.getElementById('fb-apiKey').value = '';
+            document.getElementById('fb-projectId').value = '';
+            document.getElementById('fb-authDomain').value = '';
+            document.getElementById('fb-appId').value = '';
+            showToast("Zugangsdaten gelöscht. Offline-Modus aktiv.", "fa-trash-can text-amber-400");
+            setTimeout(() => location.reload(), 800);
+        };
+
+        // Subscribe to Firestore Public Path
+        function subscribeToCloudData() {
+            const user = window.appState.user;
+            const db = window.appState.db;
+            if (!user || !db) return;
+
+            const appId = window.appState.appId;
+
+            // 1. Listen to Tariffs
+            const tariffRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'tariffs');
+            onSnapshot(tariffRef, (snapshot) => {
+                if (snapshot.exists()) {
+                    window.appState.tariffs = snapshot.data();
+                    saveToLocalStorage();
+                    loadTariffsToUI();
+                    calculateDashboardStats();
+                } else {
+                    setDoc(tariffRef, window.appState.tariffs).catch(console.error);
+                }
+            }, (error) => {
+                console.warn("Tariff sync error:", error);
+            });
+
+            // 2. Listen to Measurements
+            const entriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'measurements');
+            onSnapshot(entriesRef, (snapshot) => {
+                const fetched = [];
+                snapshot.forEach(docSnap => {
+                    fetched.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                
+                fetched.sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
+                
+                window.appState.entries = fetched;
+                saveToLocalStorage();
+                
+                updateFormLastValues();
+                renderHistoryTable();
+                calculateDashboardStats();
+                renderCharts();
+            }, (error) => {
+                console.warn("Measurements sync error:", error);
+                enableOfflineFallback();
+            });
+        }
+
+        // Expose Cloud / Local Save function
+        window.saveEntryToCloud = async function(entryData) {
+            const user = window.appState.user;
+            const db = window.appState.db;
+
+            if (!user || !db || !window.appState.isCloudActive) {
+                // Local Storage Mode
+                entryData.id = 'loc_' + Date.now();
+                window.appState.entries.push(entryData);
+                window.appState.entries.sort((a, b) => new Date(a.dateTime) - new Date(b.dateTime));
+                saveToLocalStorage();
+                updateFormLastValues();
+                renderHistoryTable();
+                calculateDashboardStats();
+                renderCharts();
+                return;
+            }
+
+            try {
+                const appId = window.appState.appId;
+                const entriesRef = collection(db, 'artifacts', appId, 'public', 'data', 'measurements');
+                await addDoc(entriesRef, entryData);
+            } catch (err) {
+                console.error("Error saving to cloud, saving locally:", err);
+                entryData.id = 'loc_' + Date.now();
+                window.appState.entries.push(entryData);
+                saveToLocalStorage();
+                renderHistoryTable();
+                calculateDashboardStats();
+            }
+        };
+
+        window.deleteEntryFromCloud = async function(id) {
+            const user = window.appState.user;
+            const db = window.appState.db;
+
+            if (!user || !db || !window.appState.isCloudActive || id.startsWith('loc_')) {
+                window.appState.entries = window.appState.entries.filter(e => e.id !== id);
+                saveToLocalStorage();
+                renderHistoryTable();
+                calculateDashboardStats();
+                renderCharts();
+                showToast("Messung gelöscht", "fa-trash-can text-amber-400");
+                return;
+            }
+
+            try {
+                const appId = window.appState.appId;
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'measurements', id);
+                await deleteDoc(docRef);
+                showToast("Messung gelöscht", "fa-trash-can text-amber-400");
+            } catch (err) {
+                console.error("Delete error:", err);
+            }
+        };
+
+        window.saveTariffsToCloud = async function(tariffData) {
+            window.appState.tariffs = tariffData;
+            saveToLocalStorage();
+            
+            const user = window.appState.user;
+            const db = window.appState.db;
+            if (user && db && window.appState.isCloudActive) {
+                try {
+                    const appId = window.appState.appId;
+                    const tariffRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'tariffs');
+                    await setDoc(tariffRef, tariffData);
+                } catch (err) {
+                    console.error("Tariff save error:", err);
+                }
+            }
+            calculateDashboardStats();
+            showToast("Tarife gespeichert", "fa-circle-check text-emerald-400");
+        };
+    </script>
+
+    <!-- Main Logic Script -->
+    <script>
+        // PWA Install Prompt Handler
+        let deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const btn = document.getElementById('btn-pwa-install');
+            if(btn) btn.classList.remove('opacity-50');
+        });
+
+        async function triggerPWAInstall() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    showToast("App wird auf dem Desktop installiert!", "fa-circle-check text-emerald-400");
+                }
+                deferredPrompt = null;
+            } else {
+                showToast("Tipp: Öffne die Datei über einen lokalen Server oder erstelle ein Browser-Lesezeichen.", "fa-circle-info text-sky-400");
+            }
+        }
+
+        // Service Worker inline registrieren
+        if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+            navigator.serviceWorker.register('data:text/javascript;charset=utf-8,' + encodeURIComponent(`
+                self.addEventListener('fetch', function(event) {
+                    event.respondWith(fetch(event.request));
+                });
+            `)).catch(err => console.warn('SW Status:', err));
+        }
+
+        // Init Inputs on DOM Load
+        document.addEventListener('DOMContentLoaded', () => {
+            const now = new Date();
+            document.getElementById('input-date').value = now.toISOString().split('T')[0];
+            document.getElementById('input-time').value = now.toTimeString().slice(0, 5);
+            if (window.appState && window.appState.tariffs) {
+                loadTariffsToUI();
+            }
+        });
+
+        // Tab Switcher
+        function switchTab(tabId) {
+            ['entry', 'dashboard', 'history', 'settings'].forEach(t => {
+                document.getElementById(`section-${t}`).classList.add('hidden');
+                document.getElementById(`tab-${t}`).classList.remove('tab-active');
+            });
+
+            document.getElementById(`section-${tabId}`).classList.remove('hidden');
+            document.getElementById(`tab-${tabId}`).classList.add('tab-active');
+
+            if (tabId === 'dashboard') {
+                renderCharts();
+            }
+        }
+
+        // Plus / Minus Adjuster for Smartphone & quick entry
+        function adjustValue(inputId, delta, decimals = 1) {
+            const el = document.getElementById(inputId);
+            let val = parseFloat(el.value);
+            if (isNaN(val)) {
+                // If empty, take previous value as starting base
+                const prev = getLatestEntry();
+                if (prev) {
+                    if (inputId === 'input-temp-room') val = prev.tempRoom || 20;
+                    else if (inputId === 'input-temp-out') val = prev.tempOut || 10;
+                    else if (inputId === 'input-meter-elec') val = prev.meterElec || 0;
+                    else if (inputId === 'input-meter-gas') val = prev.meterGas || 0;
+                    else if (inputId === 'input-meter-water') val = prev.meterWater || 0;
+                    else val = 0;
+                } else {
+                    val = 0;
+                }
+            }
+            val += delta;
+            el.value = val.toFixed(decimals);
+        }
+
+        // Get Latest Entry
+        function getLatestEntry() {
+            const entries = window.appState.entries;
+            if (!entries || entries.length === 0) return null;
+            return entries[entries.length - 1]; // Already sorted ascending
+        }
+
+        // Update indicators on entry mask
+        function updateFormLastValues() {
+            const latest = getLatestEntry();
+            if (!latest) {
+                document.getElementById('last-entry-date').innerText = "Keine Vorwerte";
+                return;
+            }
+
+            const d = new Date(latest.dateTime);
+            document.getElementById('last-entry-date').innerText = `${d.toLocaleDateString('de-DE')} (${latest.time})`;
+            
+            document.getElementById('prev-temp-room').innerText = latest.tempRoom.toFixed(1);
+            document.getElementById('prev-temp-out').innerText = latest.tempOut.toFixed(1);
+            document.getElementById('prev-meter-elec').innerText = latest.meterElec.toFixed(1);
+            document.getElementById('prev-meter-gas').innerText = latest.meterGas.toFixed(2);
+            document.getElementById('prev-meter-water').innerText = latest.meterWater.toFixed(3);
+        }
+
+        // Autofill current inputs with last recorded values
+        function prefillWithLastValues() {
+            const latest = getLatestEntry();
+            if (!latest) return;
+            document.getElementById('input-temp-room').value = latest.tempRoom;
+            document.getElementById('input-temp-out').value = latest.tempOut;
+            document.getElementById('input-meter-elec').value = latest.meterElec;
+            document.getElementById('input-meter-gas').value = latest.meterGas;
+            document.getElementById('input-meter-water').value = latest.meterWater;
+            showToast("Letzte Werte übernommen", "fa-circle-info text-sky-400");
+        }
+
+        // Handle Save Form Entry
+        async function saveEntry(e) {
+            e.preventDefault();
+
+            const dateStr = document.getElementById('input-date').value;
+            const timeStr = document.getElementById('input-time').value;
+
+            const newEntry = {
+                dateTime: `${dateStr}T${timeStr}:00`,
+                date: dateStr,
+                time: timeStr,
+                weather: document.getElementById('input-weather').value,
+                tempRoom: parseFloat(document.getElementById('input-temp-room').value),
+                tempOut: parseFloat(document.getElementById('input-temp-out').value),
+                meterElec: parseFloat(document.getElementById('input-meter-elec').value),
+                meterGas: parseFloat(document.getElementById('input-meter-gas').value),
+                meterWater: parseFloat(document.getElementById('input-meter-water').value),
+                notes: document.getElementById('input-notes').value.trim()
+            };
+
+            await window.saveEntryToCloud(newEntry);
+            showToast("Messung erfolgreich gespeichert!", "fa-circle-check text-emerald-400");
+            
+            // Clear notes
+            document.getElementById('input-notes').value = "";
+        }
+
+        // Tariffs UI Sync
+        function loadTariffsToUI() {
+            if (!window.appState || !window.appState.tariffs) return;
+            const t = window.appState.tariffs;
+
+            const fields = {
+                'tariff-elec-kwh': t.elecKwh,
+                'tariff-elec-base': t.elecBase,
+                'tariff-gas-m3': t.gasM3,
+                'tariff-gas-base': t.gasBase,
+                'tariff-water-m3': t.waterM3,
+                'tariff-water-base': t.waterBase
+            };
+
+            for (const [id, val] of Object.entries(fields)) {
+                const el = document.getElementById(id);
+                if (el && val !== undefined) {
+                    el.value = val;
+                }
+            }
+        }
+
+        function saveTariffs(e) {
+            e.preventDefault();
+            const tariffData = {
+                elecKwh: parseFloat(document.getElementById('tariff-elec-kwh').value),
+                elecBase: parseFloat(document.getElementById('tariff-elec-base').value),
+                gasM3: parseFloat(document.getElementById('tariff-gas-m3').value),
+                gasBase: parseFloat(document.getElementById('tariff-gas-base').value),
+                waterM3: parseFloat(document.getElementById('tariff-water-m3').value),
+                waterBase: parseFloat(document.getElementById('tariff-water-base').value)
+            };
+            window.saveTariffsToCloud(tariffData);
+        }
+
+        // Render History Table
+        function renderHistoryTable() {
+            const tbody = document.getElementById('history-table-body');
+            tbody.innerHTML = '';
+
+            const entries = [...window.appState.entries].reverse(); // newest first
+            document.getElementById('history-count').innerText = entries.length;
+
+            if (entries.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-slate-500">Noch keine Messdaten vorhanden.</td></tr>`;
+                return;
+            }
+
+            // Map for quick delta lookup
+            const originalAsc = window.appState.entries;
+
+            entries.forEach((item) => {
+                // find index in ascending array to calculate consumption since prev
+                const idx = originalAsc.findIndex(e => e.id === item.id || (e.dateTime === item.dateTime && e.meterElec === item.meterElec));
+                
+                let diffElec = 0, diffGas = 0, diffWater = 0;
+                let cost = 0;
+
+                if (idx > 0) {
+                    const prev = originalAsc[idx - 1];
+                    diffElec = item.meterElec - prev.meterElec;
+                    diffGas = item.meterGas - prev.meterGas;
+                    diffWater = item.meterWater - prev.meterWater;
+
+                    cost = calculateCost(diffElec, diffGas, diffWater, 0); // pure consumption cost
+                }
+
+                const d = new Date(item.dateTime);
+                const formattedDate = `${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })} ${item.time}`;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-700/40 transition";
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-mono font-medium text-slate-200">
+                        ${formattedDate}
+                        ${item.notes ? `<div class="text-[10px] text-slate-400 italic">${escapeHtml(item.notes)}</div>` : ''}
+                    </td>
+                    <td class="py-3 px-4">
+                        <div>${item.weather || '☀️'}</div>
+                        <div class="text-[10px] text-slate-400">R: ${item.tempRoom}°C | A: ${item.tempOut}°C</div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="font-bold text-amber-400">${item.meterElec.toFixed(1)}</div>
+                        ${diffElec > 0 ? `<div class="text-[10px] text-emerald-400">+${diffElec.toFixed(1)} kWh</div>` : ''}
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="font-bold text-rose-400">${item.meterGas.toFixed(2)}</div>
+                        ${diffGas > 0 ? `<div class="text-[10px] text-emerald-400">+${diffGas.toFixed(2)} m³</div>` : ''}
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="font-bold text-sky-400">${item.meterWater.toFixed(3)}</div>
+                        ${diffWater > 0 ? `<div class="text-[10px] text-emerald-400">+${diffWater.toFixed(3)} m³</div>` : ''}
+                    </td>
+                    <td class="py-3 px-4 font-semibold text-slate-100">
+                        ${idx > 0 ? `${cost.toFixed(2)} €` : '<span class="text-slate-500">Basis</span>'}
+                    </td>
+                    <td class="py-3 px-4 text-right">
+                        <button onclick="deleteEntryFromCloud('${item.id}')" class="p-1.5 text-slate-400 hover:text-rose-400 transition" title="Löschen">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Cost Calculation Utility
+        function calculateCost(kwhElec, m3Gas, m3Water, days = 0) {
+            const t = window.appState.tariffs;
+            
+            // Work prices
+            const costElec = (kwhElec * (t.elecKwh / 100));
+            const costGas = (m3Gas * t.gasM3);
+            const costWater = (m3Water * t.waterM3);
+            
+            // Base prices per day
+            const dailyBaseElec = (t.elecBase * 12) / 365;
+            const dailyBaseGas = (t.gasBase * 12) / 365;
+            const dailyBaseWater = (t.waterBase * 12) / 365;
+
+            const totalBase = (dailyBaseElec + dailyBaseGas + dailyBaseWater) * days;
+
+            return costElec + costGas + costWater + totalBase;
+        }
+
+        // Calculate Dashboard Stats & Projections
+        function calculateDashboardStats() {
+            const entries = window.appState.entries; // sorted asc
+            
+            if (entries.length < 2) {
+                document.getElementById('cost-per-day').innerText = "0,00 €";
+                document.getElementById('cost-per-week').innerText = "0,00 €";
+                document.getElementById('cost-per-month').innerText = "0,00 €";
+                document.getElementById('cost-per-year').innerText = "0,00 €";
+                return;
+            }
+
+            const first = entries[0];
+            const last = entries[entries.length - 1];
+
+            const firstDate = new Date(first.dateTime);
+            const lastDate = new Date(last.dateTime);
+            const diffTime = Math.abs(lastDate - firstDate);
+            const diffDays = Math.max(1, diffTime / (1000 * 60 * 60 * 24));
+
+            // Total Consumptions across span
+            const totalElec = Math.max(0, last.meterElec - first.meterElec);
+            const totalGas = Math.max(0, last.meterGas - first.meterGas);
+            const totalWater = Math.max(0, last.meterWater - first.meterWater);
+
+            // Averages per day
+            const avgElecDay = totalElec / diffDays;
+            const avgGasDay = totalGas / diffDays;
+            const avgWaterDay = totalWater / diffDays;
+
+            // Render Consumptions Text
+            document.getElementById('day-elec').innerText = avgElecDay.toFixed(1);
+            document.getElementById('day-gas').innerText = avgGasDay.toFixed(1);
+            document.getElementById('day-water').innerText = avgWaterDay.toFixed(2);
+
+            document.getElementById('week-elec').innerText = (avgElecDay * 7).toFixed(1);
+            document.getElementById('week-gas').innerText = (avgGasDay * 7).toFixed(1);
+            document.getElementById('week-water').innerText = (avgWaterDay * 7).toFixed(2);
+
+            document.getElementById('month-elec').innerText = (avgElecDay * 30).toFixed(0);
+            document.getElementById('month-gas').innerText = (avgGasDay * 30).toFixed(0);
+            document.getElementById('month-water').innerText = (avgWaterDay * 30).toFixed(1);
+
+            // Calculate Costs
+            const costDay = calculateCost(avgElecDay, avgGasDay, avgWaterDay, 1);
+            const costWeek = calculateCost(avgElecDay * 7, avgGasDay * 7, avgWaterDay * 7, 7);
+            const costMonth = calculateCost(avgElecDay * 30, avgGasDay * 30, avgWaterDay * 30, 30);
+            const costYear = calculateCost(avgElecDay * 365, avgGasDay * 365, avgWaterDay * 365, 365);
+
+            document.getElementById('cost-per-day').innerText = costDay.toFixed(2).replace('.', ',') + " €";
+            document.getElementById('cost-per-week').innerText = costWeek.toFixed(2).replace('.', ',') + " €";
+            document.getElementById('cost-per-month').innerText = costMonth.toFixed(2).replace('.', ',') + " €";
+            document.getElementById('cost-per-year').innerText = costYear.toFixed(2).replace('.', ',') + " €";
+        }
+
+        // Render Charts with Chart.js
+        function renderCharts() {
+            const entries = window.appState.entries;
+            if (entries.length < 2) return;
+
+            const labels = [];
+            const dataElec = [];
+            const dataGas = [];
+            const dataWater = [];
+            const dataTempOut = [];
+
+            for (let i = 1; i < entries.length; i++) {
+                const prev = entries[i - 1];
+                const curr = entries[i];
+                const d = new Date(curr.dateTime);
+                labels.push(`${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`);
+
+                dataElec.push(Math.max(0, curr.meterElec - prev.meterElec));
+                dataGas.push(Math.max(0, curr.meterGas - prev.meterGas));
+                dataWater.push(Math.max(0, curr.meterWater - prev.meterWater));
+                dataTempOut.push(curr.tempOut);
+            }
+
+            // Main Consumption Chart
+            const ctx1 = document.getElementById('consumptionChart').getContext('2d');
+            if (window.appState.chartInstance) {
+                window.appState.chartInstance.destroy();
+            }
+
+            const activeType = window.appState.activeChartType;
+            const datasets = [];
+
+            if (activeType === 'all' || activeType === 'elec') {
+                datasets.push({
+                    label: 'Strom (kWh)',
+                    data: dataElec,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                    fill: true,
+                    tension: 0.3
+                });
+            }
+            if (activeType === 'all' || activeType === 'gas') {
+                datasets.push({
+                    label: 'Gas (m³)',
+                    data: dataGas,
+                    borderColor: '#f43f5e',
+                    backgroundColor: 'rgba(244, 63, 94, 0.2)',
+                    fill: true,
+                    tension: 0.3
+                });
+            }
+            if (activeType === 'all' || activeType === 'water') {
+                datasets.push({
+                    label: 'Wasser (m³)',
+                    data: dataWater,
+                    borderColor: '#0284c7',
+                    backgroundColor: 'rgba(2, 132, 199, 0.2)',
+                    fill: true,
+                    tension: 0.3
+                });
+            }
+
+            window.appState.chartInstance = new Chart(ctx1, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: '#94a3b8' } }
+                    },
+                    scales: {
+                        x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(51, 65, 85, 0.3)' } },
+                        y: { ticks: { color: '#64748b' }, grid: { color: 'rgba(51, 65, 85, 0.3)' } }
+                    }
+                }
+            });
+
+            // Temperature vs Energy Secondary Chart
+            const ctx2 = document.getElementById('tempChart').getContext('2d');
+            if (window.appState.tempChartInstance) {
+                window.appState.tempChartInstance.destroy();
+            }
+
+            window.appState.tempChartInstance = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'Außentemperatur (°C)',
+                            data: dataTempOut,
+                            type: 'line',
+                            borderColor: '#38bdf8',
+                            borderWidth: 2,
+                            yAxisID: 'y1',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Gas Verbrauch (m³)',
+                            data: dataGas,
+                            backgroundColor: 'rgba(244, 63, 94, 0.6)',
+                            yAxisID: 'y'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94a3b8' } } },
+                    scales: {
+                        x: { ticks: { color: '#64748b' }, grid: { color: 'rgba(51, 65, 85, 0.3)' } },
+                        y: { type: 'linear', position: 'left', ticks: { color: '#f43f5e' }, grid: { color: 'rgba(51, 65, 85, 0.3)' } },
+                        y1: { type: 'linear', position: 'right', ticks: { color: '#38bdf8' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
+        }
+
+        function updateChartDataset(type) {
+            window.appState.activeChartType = type;
+            ['all', 'elec', 'gas', 'water'].forEach(t => {
+                const btn = document.getElementById(`btn-chart-${t}`);
+                if (t === type) {
+                    btn.className = "px-3 py-1 bg-sky-600 text-white rounded-lg text-xs font-medium";
+                } else {
+                    btn.className = "px-3 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-medium";
+                }
+            });
+            renderCharts();
+        }
+
+        // CSV Export
+        function exportCSV() {
+            const entries = window.appState.entries;
+            if (entries.length === 0) {
+                showToast("Keine Daten zum Exportieren vorhanden", "fa-circle-exclamation text-amber-400");
+                return;
+            }
+
+            let csvContent = "data:text/csv;charset=utf-8,Datum,Uhrzeit,Wetter,TempRaum,TempAussen,StromkWh,Gasm3,Wasser m3,Notizen\n";
+
+            entries.forEach(e => {
+                const row = [
+                    e.date,
+                    e.time,
+                    `"${e.weather || ''}"`,
+                    e.tempRoom,
+                    e.tempOut,
+                    e.meterElec,
+                    e.meterGas,
+                    e.meterWater,
+                    `"${(e.notes || '').replace(/"/g, '""')}"`
+                ].join(",");
+                csvContent += row + "\n";
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `energie_wasser_export_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("CSV Datei wurde heruntergeladen", "fa-download text-sky-400");
+        }
+
+        // CSV File Import
+        function importCSVFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                processCSVText(e.target.result);
+            };
+            reader.readAsText(file);
+        }
+
+        // Direct Text Import (Copy/Paste Window)
+        function importTextData() {
+            const text = document.getElementById('text-import-area').value.trim();
+            if (!text) {
+                showToast("Bitte Text oder CSV Daten einfügen", "fa-circle-exclamation text-amber-400");
+                return;
+            }
+            processCSVText(text);
+            document.getElementById('text-import-area').value = "";
+        }
+
+        function processCSVText(csvText) {
+            const lines = csvText.split('\n');
+            let importedCount = 0;
+
+            lines.forEach((line, index) => {
+                if (index === 0 && line.toLowerCase().includes('datum')) return; // Header skip
+                if (!line.trim()) return;
+
+                const cols = line.split(',');
+                if (cols.length >= 8) {
+                    const date = cols[0].trim();
+                    const time = cols[1].trim();
+                    const weather = cols[2].replace(/"/g, '').trim();
+                    const tempRoom = parseFloat(cols[3]);
+                    const tempOut = parseFloat(cols[4]);
+                    const meterElec = parseFloat(cols[5]);
+                    const meterGas = parseFloat(cols[6]);
+                    const meterWater = parseFloat(cols[7]);
+                    const notes = cols[8] ? cols[8].replace(/"/g, '').trim() : '';
+
+                    if (!isNaN(meterElec) && !isNaN(meterGas) && !isNaN(meterWater)) {
+                        const entryData = {
+                            dateTime: `${date}T${time}:00`,
+                            date,
+                            time,
+                            weather: weather || '☀️ Sonnig',
+                            tempRoom: isNaN(tempRoom) ? 20 : tempRoom,
+                            tempOut: isNaN(tempOut) ? 10 : tempOut,
+                            meterElec,
+                            meterGas,
+                            meterWater,
+                            notes
+                        };
+                        window.saveEntryToCloud(entryData);
+                        importedCount++;
+                    }
+                }
+            });
+
+            showToast(`${importedCount} Einträge erfolgreich importiert!`, "fa-file-circle-check text-emerald-400");
+        }
+
+        // Copy User Sync ID
+        function copySyncId() {
+            const input = document.getElementById('user-sync-id');
+            input.select();
+            document.execCommand('copy');
+            showToast("Cloud ID kopiert!", "fa-copy text-sky-400");
+        }
+
+        // Copy Current Web URL for opening on smartphone
+        function copyCurrentUrl() {
+            const tempInput = document.createElement('input');
+            tempInput.value = window.location.href;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            showToast("Web-Link kopiert!", "fa-link text-sky-400");
+        }
+
+        // Custom Toast Notification (No alert())
+        function showToast(msg, iconClass = "fa-circle-check text-emerald-400") {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toast-message');
+            const toastIcon = document.getElementById('toast-icon');
+
+            toastMsg.innerText = msg;
+            toastIcon.className = `fa-solid ${iconClass} text-lg`;
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        // Helper string escape
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
